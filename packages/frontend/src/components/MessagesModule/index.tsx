@@ -58,16 +58,23 @@ export function MessagesModule() {
 
   async function uploadImage(id: string, file: File) {
     setUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await fetch('/api/assets/upload', {
-      method: 'POST',
-      credentials: 'include',
-      body: formData,
-    })
-    const data = await res.json()
-    await updateVariation(id, { imageUrl: data.url })
-    setUploading(false)
+    try {
+      const base = import.meta.env.VITE_API_URL ?? ''
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch(`${base}/api/assets/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      })
+      if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`)
+      const data = await res.json()
+      await updateVariation(id, { imageUrl: data.url })
+    } catch (err) {
+      console.error('[uploadImage]', err)
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (

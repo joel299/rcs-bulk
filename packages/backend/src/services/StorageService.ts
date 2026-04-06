@@ -51,10 +51,14 @@ class StorageService {
       'Content-Type': mimeType,
     })
 
+    // MINIO_PUBLIC_URL permite expor a URL pública (ex: https://rcs-minio.exemplo.com)
+    // em vez da URL interna do Docker (ex: http://minio:9000)
+    if (process.env.MINIO_PUBLIC_URL) {
+      return `${process.env.MINIO_PUBLIC_URL}/${this.bucket}/${objectName}`
+    }
     const endpoint = process.env.MINIO_ENDPOINT ?? 'localhost'
     const port = process.env.MINIO_PORT ?? '9000'
     const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http'
-
     return `${protocol}://${endpoint}:${port}/${this.bucket}/${objectName}`
   }
 

@@ -45,7 +45,7 @@ services:
         - "traefik.http.routers.rcs-minio.entrypoints=websecure"
         - "traefik.http.routers.rcs-minio.tls.certresolver=letsencrypt"
         - "traefik.http.routers.rcs-minio.service=rcs-minio-svc"
-        - "traefik.http.services.rcs-minio-svc.loadbalancer.server.port=9001"
+        - "traefik.http.services.rcs-minio-svc.loadbalancer.server.port=9000"
 
   # ── Backend ──────────────────────────────────────────────────────────────────
   backend:
@@ -72,6 +72,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: rcs-assets
       MINIO_USE_SSL: "false"
+      MINIO_PUBLIC_URL: https://rcs-minio.representacoes-ia.com
       FRONTEND_URL: https://rcs.representacoes-ia.com
       BROWSER_IDLE_TTL_MS: "600000"
     volumes:

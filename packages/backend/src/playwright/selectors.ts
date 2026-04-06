@@ -1,6 +1,7 @@
 /**
  * Seletores do Google Messages Web.
- * CSS selectors apenas — XPath não pode ser combinado por vírgula com CSS no Playwright.
+ * Preferência por CSS baseado em componentes web (mw-*, mws-*) para robustez.
+ * XPath absoluto quebra quando a interface do Google muda.
  */
 export const Selectors = {
   // Tela de autenticação QR
@@ -13,23 +14,23 @@ export const Selectors = {
 
   // ── Fluxo de envio ──────────────────────────────────────────────────────────
 
-  /** FAB "Iniciar chat" — XPath exato fornecido pelo usuário */
-  startChatBtn: 'xpath=/html/body/mw-app/mw-bootstrap/div/main/mw-main-container/div/mw-main-nav/div/mw-fab-link/a',
+  /** FAB "Iniciar chat" — CSS por componente (mais robusto que XPath absoluto) */
+  startChatBtn: 'mw-fab-link a, mw-new-conversation-button a, [href*="/conversations/new"]',
 
   /** Campo do destinatário (nova conversa) */
-  recipientInput: 'xpath=/html/body/mw-app/mw-bootstrap/div/main/mw-main-container/div/mw-new-conversation-container/mw-new-conversation-sub-header/div/div[1]/div[2]/mw-contact-chips-input/div/div/input',
+  recipientInput: 'mw-contact-chips-input input, mw-new-conversation-sub-header input[type="text"], input[aria-label*="phone" i], input[aria-label*="number" i], input[placeholder*="phone" i]',
 
   /** Chip / botão "Enviar para …" */
-  contactSelectorBtn: 'xpath=/html/body/mw-app/mw-bootstrap/div/main/mw-main-container/div/mw-new-conversation-container/div/mw-contact-selector-button/button',
+  contactSelectorBtn: 'mw-contact-selector-button button, mws-recipient-contact button, [data-e2e-contact-button]',
 
   /** Botão de envio */
-  sendBtn: 'xpath=/html/body/mw-app/mw-bootstrap/div/main/mw-main-container/div/mw-conversation-container/div/div[1]/div/mws-message-compose/div/div[2]/div/div/mws-message-send-button/div/mw-message-send-button/button',
+  sendBtn: 'mws-message-send-button button, mw-message-send-button button, [aria-label*="Send" i], [aria-label*="Enviar" i], [data-e2e-send-button]',
 
   /** Campo de texto da mensagem */
   messageInput: 'mws-message-compose [contenteditable], mws-message-compose textarea, mws-conversation-container [contenteditable]',
 
   /** Botão de anexo */
-  attachButton: 'mws-message-compose mws-attach-button button, [data-tooltip="Attach"], [aria-label*="Anexar"], [aria-label*="Attach"]',
+  attachButton: 'mws-attach-button button, mws-message-compose [aria-label*="Attach" i], mws-message-compose [aria-label*="Anexar" i]',
 
   /** Input de arquivo para imagem */
   fileInput: 'mws-message-compose input[type="file"], input[type="file"][accept*="image"]',

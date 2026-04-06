@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { AuthModule } from './components/AuthModule'
 import { ContactsModule } from './components/ContactsModule'
 import { MessagesModule } from './components/MessagesModule'
@@ -14,6 +14,58 @@ import { useNumbers } from './store/numbersStore'
 import { useApi } from './hooks/useApi'
 
 type Tab = 'auth' | 'contacts' | 'messages' | 'schedule'
+
+// ── Ícones SVG ────────────────────────────────────────────────────────────────
+const iconStyle: React.CSSProperties = { display: 'block', transition: 'transform 0.2s ease' }
+
+function IconNumbers() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={iconStyle}>
+      <rect x="5" y="3" width="6" height="18" rx="1.5" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M13 7h4M13 12h6M13 17h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M5 8h2M5 12h2M5 16h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconContacts() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={iconStyle}>
+      <rect x="4" y="3" width="12" height="18" rx="2" stroke="currentColor" strokeWidth="1.8"/>
+      <circle cx="10" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.6"/>
+      <path d="M5.5 18c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M17 7h3M17 12h3M17 17h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconMessages() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={iconStyle}>
+      <path d="M4 5h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-4 3V7a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+      <path d="M20 8h0a2 2 0 012 2v5a2 2 0 01-2 2h-1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M8 10h6M8 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconDispatch() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={iconStyle}>
+      <path d="M20 4L3 11l7 3 3 7 7-17z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+      <path d="M10 14l4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function IconLogo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={iconStyle}>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6"/>
+      <path d="M6 12L18 7l-5 11-2.5-5L6 12z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+    </svg>
+  )
+}
 
 interface AppProps {
   embedMode?: boolean
@@ -73,11 +125,11 @@ export function App({ embedMode = false, hideModules = [], readOnly = false }: A
     return <LoginPage onSuccess={() => setAuthed(true)} />
   }
 
-  const visibleTabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'auth',     label: 'Números',    icon: '📱' },
-    { key: 'contacts', label: 'Contatos',   icon: '👥' },
-    { key: 'messages', label: 'Mensagens',  icon: '💬' },
-    { key: 'schedule', label: 'Disparo',    icon: '🚀' },
+  const visibleTabs: { key: Tab; label: string; icon: ReactNode }[] = [
+    { key: 'auth',     label: 'Números',    icon: <IconNumbers /> },
+    { key: 'contacts', label: 'Contatos',   icon: <IconContacts /> },
+    { key: 'messages', label: 'Mensagens',  icon: <IconMessages /> },
+    { key: 'schedule', label: 'Disparo',    icon: <IconDispatch /> },
   ].filter((t) => !hideModules.includes(t.key))
 
   return (
@@ -105,8 +157,8 @@ export function App({ embedMode = false, hideModules = [], readOnly = false }: A
           zIndex: 50,
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em' }}>
-          📡 RCS Dispatcher
+        <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <IconLogo /> RCS Dispatcher
         </span>
 
         {/* Segmented control de tabs */}
@@ -128,6 +180,14 @@ export function App({ embedMode = false, hideModules = [], readOnly = false }: A
                 background: tab === key ? 'rgba(255,255,255,0.12)' : 'transparent',
                 color: tab === key ? 'var(--text-primary)' : 'var(--text-secondary)',
                 transition: 'all var(--transition)',
+              }}
+              onMouseEnter={(e) => {
+                const svg = (e.currentTarget as HTMLElement).querySelector('svg')
+                if (svg) svg.style.transform = 'translateY(-1px) scale(1.1)'
+              }}
+              onMouseLeave={(e) => {
+                const svg = (e.currentTarget as HTMLElement).querySelector('svg')
+                if (svg) svg.style.transform = ''
               }}
             >
               {icon} {label}

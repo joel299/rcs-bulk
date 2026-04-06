@@ -194,18 +194,34 @@ export async function sendMessage(
 }
 
 /**
- * Tenta anexar imagem diretamente via input[type="file"] (sem abrir menus).
- * Playwright consegue setar arquivos em inputs ocultos.
+ * Anexa imagem no Google Messages.
+ * Estratégia 1: fileChooser (intercepta o evento nativo de abertura de seletor)
+ * Estratégia 2: setar diretamente no input[type="file"] oculto
  */
 async function attachImage(page: Page, localImagePath: string): Promise<void> {
   try {
-    // Tenta setar diretamente no input file (funciona mesmo oculto no Playwright)
+    // Estratégia 1: interceptar o fileChooser quando o botão de anexo for clicado
+    const attachBtn = page.locator(Selectors.attachButton).first()
+    const hasAttachBtn = await attachBtn.count().catch(() => 0)
+
+    if (hasAttachBtn > 0) {
+      const [fileChooser] = await Promise.all([
+        page.waitForEvent('filechooser', { timeout: 6_000 }),
+        attachBtn.click(),
+      ])
+      await fileChooser.setFiles(localImagePath)
+      console.log(`[attachImage] Image attached via fileChooser`)
+      await randomDelay(1500, 2500)
+      return
+    }
+
+    // Estratégia 2: setar diretamente no input[type="file"] oculto
     const fileInput = page.locator('input[type="file"]').first()
     await fileInput.setInputFiles(localImagePath, { timeout: 5_000 })
-    console.log(`[sendMessage] Image attached via file input`)
-    await randomDelay(1000, 2000)
+    console.log(`[attachImage] Image attached via file input`)
+    await randomDelay(1500, 2500)
   } catch (err) {
-    console.warn(`[sendMessage] Could not attach image, skipping:`, String(err))
+    console.warn(`[attachImage] Could not attach image, skipping:`, String(err))
   }
 }
 
