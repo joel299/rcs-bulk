@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose:*)",
+      "Bash(npm install:*)",
+      "Bash(pip install:*)",
+      "Bash(docker-compose --version)",
+      "Bash(npm list:*)",
+      "Bash(export PATH=$HOME/.local/share/pnpm:$HOME/.npm-global/bin:/usr/local/lib/node_modules/.bin:$PATH)",
+      "Bash(npx pnpm@9 --version)",
+      "Read(//home/joel/.local/share/**)",
+      "Read(//usr/local/lib/**)",
+      "Bash(npm config:*)",
+      "Bash(corepack enable:*)",
+      "Bash(corepack prepare:*)",
+      "Read(//home/joel/.local/lib/node_modules/.bin/**)",
+      "Read(//root/.local/lib/node_modules/.bin/**)",
+      "Bash(sudo npm:*)",
+      "Bash(npx --yes tsx@latest src/utils/phone.test.ts)",
+      "Bash(node -e \":*)",
+      "Bash(node --test /tmp/template.test.mjs)",
+      "Bash(export PATH=/home/joel/.npm-global/bin:$PATH)",
+      "Read(//home/joel/.npm-global/**)",
+      "Bash(pkill -f 'npm install')"
+    ]
+  }
+}

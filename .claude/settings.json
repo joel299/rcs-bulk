@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pg_isready -h localhost -p 5432)",
+      "Bash(redis-cli -h localhost ping)",
+      "Bash(pnpm install:*)",
+      "Read(//usr/local/**)",
+      "Bash(export PATH=\"$PATH:/home/joel/.local/share/pnpm\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(ls /tmp/*.png /tmp/*.jpg)",
+      "Bash(head -10 ls ~/Pictures/*.png ~/Downloads/*.png)",
+      "Bash(docker exec:*)",
+      "Bash(curl -s -b /tmp/rcs_cookies.txt http://localhost:3002/api/numbers)",
+      "Bash(ls -t /tmp/debug-rcs-*.png)"
+    ]
+  }
+}
