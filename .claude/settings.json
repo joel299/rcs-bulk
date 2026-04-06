@@ -11,7 +11,17 @@
       "Bash(head -10 ls ~/Pictures/*.png ~/Downloads/*.png)",
       "Bash(docker exec:*)",
       "Bash(curl -s -b /tmp/rcs_cookies.txt http://localhost:3002/api/numbers)",
-      "Bash(ls -t /tmp/debug-rcs-*.png)"
+      "Bash(ls -t /tmp/debug-rcs-*.png)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl -s -X POST https://portainer.representacoes-ia.com/api/auth -H \"Content-Type: application/json\" -d '{\"\"\"\"username\"\"\"\":\"\"\"\"admin\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Alcate_IA@12345,\"\"\"\"}')",
+      "Bash(python3 -c \"import json,sys; print\\(json.dumps\\(json.load\\(sys.stdin\\), indent=2\\)\\)\")",
+      "Bash(/home/joel/projetos/bulk-rsc/packages/frontend/Dockerfile:*)",
+      "Bash(/home/joel/projetos/bulk-rsc/docker-compose.portainer.yml:*)",
+      "Bash(git add:*)",
+      "Bash(__NEW_LINE_6b9b749c82bb7078__ git:*)",
+      "Read(//home/joel/projetos/**)"
     ]
   }
 }

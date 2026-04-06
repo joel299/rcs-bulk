@@ -448,6 +448,181 @@ header select:focus {
   border-color: rgba(47, 128, 237, 0.35);
 }
 
+/* ── Seletor de horário (substitui input[type=time] — mesmo glass da campanha) ─ */
+.time-select {
+  position: relative;
+  min-width: 128px;
+  max-width: 200px;
+}
+
+.time-select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.time-select__trigger:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+}
+
+.time-select__trigger:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle), 0 2px 16px rgba(0, 0, 0, 0.3);
+}
+
+.time-select__trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.time-select__clock {
+  flex-shrink: 0;
+  opacity: 0.75;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.time-select__label {
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+}
+
+.time-select__chevron {
+  flex-shrink: 0;
+  opacity: 0.65;
+  font-size: 11px;
+  line-height: 1;
+  transition: transform var(--transition-fast);
+}
+
+.time-select__chevron--open {
+  transform: rotate(180deg);
+}
+
+.time-select__menu {
+  position: fixed;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: min(280px, 50vh);
+  padding: 8px;
+  background: rgba(10, 11, 18, 0.78);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-glass);
+  animation: card-enter var(--transition-base) both;
+}
+
+.time-select__menu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.08) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.time-select__col {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(264px, 48vh);
+}
+
+.time-select__col-title {
+  flex-shrink: 0;
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.time-select__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 0;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.time-select__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px;
+}
+
+.time-select__option {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin: 1px 0;
+  font-size: 13px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.time-select__option:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border);
+}
+
+.time-select__option--active {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  border-color: rgba(47, 128, 237, 0.28);
+  box-shadow: 0 0 12px rgba(47, 128, 237, 0.12);
+}
+
+.time-select__option--active:hover {
+  background: rgba(47, 128, 237, 0.16);
+  border-color: rgba(47, 128, 237, 0.35);
+}
+
 /* ── Main content ───────────────────────────────────────────────────────── */
 main {
   animation: page-enter 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
