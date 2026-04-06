@@ -1,0 +1,142 @@
+version: "3.8"
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rcs
+      POSTGRES_USER: rcs_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Rcs@2025Secure}
+    volumes:
+      - rcs_postgres:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rcs_user -d rcs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - rcs_redis:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO ────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - rcs_minio:/data
+    networks:
+      - internal
+      - suaredeaqui
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=suaredeaqui"
+      # Console MinIO
+      - "traefik.http.routers.rcs-minio.rule=Host(`rcs-minio.representacoes-ia.com`)"
+      - "traefik.http.routers.rcs-minio.entrypoints=websecure"
+      - "traefik.http.routers.rcs-minio.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.rcs-minio.service=rcs-minio-svc"
+      - "traefik.http.services.rcs-minio-svc.loadbalancer.server.port=9001"
+
+  # ── Backend ──────────────────────────────────────────────────────────────────
+  backend:
+    image: ghcr.io/joel299/rcs-bulk-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: rcs
+      POSTGRES_USER: rcs_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Rcs@2025Secure}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-troque-por-string-longa-e-aleatoria}
+      COOKIE_SECRET: ${COOKIE_SECRET:-troque-por-outro-secret-longo}
+      SESSIONS_DIR: /tmp/rcs-sessions
+      PLAYWRIGHT_AUTH_HEADLESS: "false"
+      PLAYWRIGHT_HEADLESS: "true"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: rcs-assets
+      MINIO_USE_SSL: "false"
+      FRONTEND_URL: https://rcs.representacoes-ia.com
+      BROWSER_IDLE_TTL_MS: 600000
+    volumes:
+      - rcs_sessions:/tmp/rcs-sessions
+    networks:
+      - internal
+      - suaredeaqui
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=suaredeaqui"
+      - "traefik.http.routers.rcs-api.rule=Host(`rcs-api.representacoes-ia.com`)"
+      - "traefik.http.routers.rcs-api.entrypoints=websecure"
+      - "traefik.http.routers.rcs-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.rcs-api.service=rcs-api-svc"
+      - "traefik.http.services.rcs-api-svc.loadbalancer.server.port=3002"
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    image: ghcr.io/joel299/rcs-bulk-frontend:latest
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+      args:
+        VITE_API_URL: https://rcs-api.representacoes-ia.com
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - suaredeaqui
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=suaredeaqui"
+      - "traefik.http.routers.rcs-frontend.rule=Host(`rcs.representacoes-ia.com`)"
+      - "traefik.http.routers.rcs-frontend.entrypoints=websecure"
+      - "traefik.http.routers.rcs-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.rcs-frontend.service=rcs-frontend-svc"
+      - "traefik.http.services.rcs-frontend-svc.loadbalancer.server.port=80"
+
+volumes:
+  rcs_postgres:
+  rcs_redis:
+  rcs_minio:
+  rcs_sessions:
+
+networks:
+  internal:
+    driver: overlay
+    internal: true
+  suaredeaqui:
+    external: true

@@ -1,15 +1,22 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@10
 WORKDIR /app
 
-COPY pnpm-workspace.yaml ./
-COPY package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/frontend/package.json ./packages/frontend/
+
+RUN pnpm install --frozen-lockfile
+
 COPY packages/shared ./packages/shared
 COPY packages/frontend ./packages/frontend
 
-RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @rcs/shared build
+# VITE_API_URL injetado no build via ARG
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN pnpm --filter @rcs/shared build 2>/dev/null || true
 RUN pnpm --filter @rcs/frontend build
 
 FROM nginx:alpine

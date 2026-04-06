@@ -3,6 +3,7 @@ import { GlassCard } from '../ui/GlassCard'
 import { Button } from '../ui/Button'
 import { ProgressBar } from '../ui/ProgressBar'
 import { Badge } from '../ui/Badge'
+import { TimeSelect } from '../ui/TimeSelect'
 import { useCampaignStore } from '../../store/campaignStore'
 import { useApi } from '../../hooks/useApi'
 import type { Campaign, CampaignProgress, WeekDay } from '@rcs/shared'
@@ -185,26 +186,22 @@ export function ScheduleModule() {
           </div>
         </div>
 
-        {/* Horário */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-          <div>
+        {/* Horário — seletor customizado (glass), evita picker nativo branco */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', overflow: 'visible' }}>
+          <div style={{ overflow: 'visible' }}>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>Início</p>
-            <input
-              type="time"
+            <TimeSelect
               value={activeCampaign.scheduleStart}
               disabled={isRunning}
-              onChange={(e) => updateSchedule({ scheduleStart: e.target.value })}
-              style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: 8, color: 'var(--text-primary)', padding: '8px 12px', fontSize: 14, fontFamily: 'inherit' }}
+              onChange={(scheduleStart) => updateSchedule({ scheduleStart })}
             />
           </div>
-          <div>
+          <div style={{ overflow: 'visible' }}>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>Fim</p>
-            <input
-              type="time"
+            <TimeSelect
               value={activeCampaign.scheduleEnd}
               disabled={isRunning}
-              onChange={(e) => updateSchedule({ scheduleEnd: e.target.value })}
-              style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: 8, color: 'var(--text-primary)', padding: '8px 12px', fontSize: 14, fontFamily: 'inherit' }}
+              onChange={(scheduleEnd) => updateSchedule({ scheduleEnd })}
             />
           </div>
         </div>
