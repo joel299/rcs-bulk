@@ -1,3 +1,4 @@
+import fs from 'fs'
 import { chromium, BrowserContext } from 'playwright'
 
 // playwright-extra com stealth
@@ -34,9 +35,15 @@ export function randomUserAgent() {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
 }
 
+export type LaunchStealthOptions = {
+  /** Se existir, aplicado no launch (cookies/localStorage exportados pelo Playwright). */
+  storageStatePath?: string
+}
+
 export async function launchStealthContext(
   sessionDir: string,
-  headless = true
+  headless = true,
+  options?: LaunchStealthOptions
 ): Promise<BrowserContext> {
   const slowMo = Number(process.env.PLAYWRIGHT_SLOW_MO) || 0
   const executablePath = process.env.CHROME_EXECUTABLE_PATH?.trim() || undefined
@@ -60,6 +67,13 @@ export async function launchStealthContext(
     args.push('--start-maximized')
   }
 
+  const storageStatePath = options?.storageStatePath
+  const useStorageState =
+    storageStatePath && fs.existsSync(storageStatePath) ? storageStatePath : undefined
+  if (storageStatePath && !useStorageState) {
+    console.warn(`[stealth] storageState path missing on disk, skipping: ${storageStatePath}`)
+  }
+
   const context: BrowserContext = await (chromiumExtra as typeof chromium).launchPersistentContext(
     sessionDir,
     {
@@ -74,6 +88,7 @@ export async function launchStealthContext(
       permissions: ['notifications'],
       bypassCSP: false,
       ignoreHTTPSErrors: false,
+      ...(useStorageState ? { storageState: useStorageState } : {}),
     }
   )
 

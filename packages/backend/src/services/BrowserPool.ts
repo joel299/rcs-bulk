@@ -2,6 +2,11 @@ import path from 'path'
 import fs from 'fs'
 import { BrowserContext } from 'playwright'
 import { launchStealthContext } from '../playwright/stealth'
+import {
+  getChromeProfileDir,
+  getStorageStatePath,
+  ensureValidStorageStateFileOrRemove,
+} from '../config/sessionsRoot'
 
 interface PoolEntry {
   context: BrowserContext
@@ -62,10 +67,11 @@ class BrowserPool {
   }
 
   private async _doOpen(numberId: string, headless: boolean): Promise<BrowserContext> {
-    const sessionsDir = process.env.SESSIONS_DIR ?? '/tmp/rcs-sessions'
-    const sessionPath = path.join(sessionsDir, numberId)
+    ensureValidStorageStateFileOrRemove(numberId)
+    const sessionPath = getChromeProfileDir(numberId)
+    const storageStatePath = getStorageStatePath(numberId)
 
-    // Garante que o diretório da sessão existe
+    // Garante que o diretório do perfil Chromium existe
     fs.mkdirSync(sessionPath, { recursive: true })
 
     // Remove SingletonLock se o browser anterior crashou sem limpar
@@ -82,7 +88,9 @@ class BrowserPool {
       try { fs.unlinkSync(cookieFile) } catch {}
     }
 
-    const context = await launchStealthContext(sessionPath, headless)
+    const context = await launchStealthContext(sessionPath, headless, {
+      storageStatePath,
+    })
 
     const entry: PoolEntry = {
       context,

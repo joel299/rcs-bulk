@@ -15,10 +15,23 @@ export const dispatchQueueInstance = new Queue<DispatchJobData>('dispatch', {
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
-    removeOnComplete: { count: 1000 },
-    removeOnFail: { count: 500 },
+    removeOnComplete: { age: 3600, count: 100 },
+    removeOnFail: { age: 86400, count: 500 },
   },
 })
+
+/** Remove histórico completed/failed antigo ao subir — evita estado confuso após restart */
+export async function cleanDispatchQueueOnStartup(): Promise<void> {
+  try {
+    const completed = await dispatchQueueInstance.clean(0, 10_000, 'completed')
+    const failed = await dispatchQueueInstance.clean(0, 10_000, 'failed')
+    console.log(
+      `[DispatchQueue] Startup clean: ${completed.length} completed, ${failed.length} failed job(s) removed`
+    )
+  } catch (err) {
+    console.warn('[DispatchQueue] Startup clean failed:', err)
+  }
+}
 
 /** Verifica se o momento atual está dentro da janela configurada da campanha */
 function isWithinScheduleWindow(campaign: any): boolean {

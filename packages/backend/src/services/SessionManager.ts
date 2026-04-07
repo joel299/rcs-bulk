@@ -1,8 +1,13 @@
+import fs from 'fs'
 import { Page } from 'playwright'
 import { db } from '../db/client'
 import { browserPool } from './BrowserPool'
 import { Selectors } from '../playwright/selectors'
 import { randomDelay } from '../playwright/actions'
+import {
+  getStorageStatePath,
+  logSessionsDirDiagnostics,
+} from '../config/sessionsRoot'
 
 /** Headless para fila de envio (default true). false = janela visível para debug. */
 function dispatchHeadless(): boolean {
@@ -18,10 +23,78 @@ interface SessionState {
   page: Page | null
   status: 'pending_auth' | 'authenticated' | 'disconnected'
   keepaliveInterval: NodeJS.Timeout | null
+  storageKeepaliveInterval: NodeJS.Timeout | null
 }
 
 class SessionManager {
   private sessions = new Map<string, SessionState>()
+
+  private async saveStorageState(numberId: string, page: Page): Promise<void> {
+    const sessionPath = getStorageStatePath(numberId)
+    try {
+      await page.context().storageState({ path: sessionPath })
+      console.log(`[SessionManager] Session saved: ${sessionPath}`)
+    } catch (err) {
+      console.error(`[SessionManager] Failed to save session for ${numberId}:`, err)
+    }
+  }
+
+  /** Persiste cookies antes de fechar browser (shutdown / destroy). */
+  private async flushStorageState(numberId: string, page: Page | null): Promise<void> {
+    if (!page || page.isClosed()) return
+    try {
+      const sessionPath = getStorageStatePath(numberId)
+      await page.context().storageState({ path: sessionPath })
+      console.log(`[SessionManager] Flushed storageState before close: ${sessionPath}`)
+    } catch (err) {
+      console.warn(`[SessionManager] flushStorageState failed for ${numberId}:`, err)
+    }
+  }
+
+  private async tryMinimizeBrowserWindow(page: Page): Promise<void> {
+    if (process.env.PLAYWRIGHT_HEADLESS !== 'false') return
+    try {
+      const cdp = await page.context().newCDPSession(page)
+      type PageInternal = Page & { _target?: { _targetId?: string } }
+      const targetId = (page as PageInternal)._target?._targetId
+      if (!targetId) {
+        console.warn('[SessionManager] Could not minimize (no targetId)')
+        return
+      }
+      const { windowId } = await cdp.send('Browser.getWindowForTarget', { targetId })
+      await cdp.send('Browser.setWindowBounds', {
+        windowId,
+        bounds: { windowState: 'minimized' },
+      })
+      console.log(`[SessionManager] Browser window minimized`)
+    } catch {
+      console.warn('[SessionManager] Could not minimize browser window (non-critical)')
+    }
+  }
+
+  /** Página ainda utilizável e browser conectado (quando exposto pelo Playwright). */
+  private isPlaywrightSessionAlive(page: Page): boolean {
+    try {
+      if (page.isClosed()) return false
+      const browser = page.context().browser()
+      if (browser !== null && !browser.isConnected()) return false
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Remove estado em memória; opcionalmente fecha o pool se ainda estiver aberto. */
+  private async clearLocalSession(numberId: string): Promise<void> {
+    const session = this.sessions.get(numberId)
+    if (session?.keepaliveInterval) clearInterval(session.keepaliveInterval)
+    if (session?.storageKeepaliveInterval) clearInterval(session.storageKeepaliveInterval)
+    if (session?.page) await this.flushStorageState(numberId, session.page)
+    this.sessions.delete(numberId)
+    if (browserPool.isOpen(numberId)) {
+      await browserPool.close(numberId)
+    }
+  }
 
   async initSession(numberId: string, orgId: string): Promise<void> {
     console.log(`[SessionManager] Initializing session for number ${numberId}`)
@@ -73,13 +146,19 @@ class SessionManager {
           })
           await page.waitForTimeout(2_000)
 
+          await this.saveStorageState(numberId, page)
+          await this.tryMinimizeBrowserWindow(page)
+
           const session: SessionState = {
             page,
             status: 'authenticated',
             keepaliveInterval: this.startKeepalive(numberId, page),
+            storageKeepaliveInterval: this.startStorageKeepalive(numberId, page),
           }
           this.sessions.set(numberId, session)
-          console.log(`[SessionManager] Session registered for dispatch for ${numberId}`)
+          console.log(
+            `[SessionManager] Session registered for dispatch for ${numberId} (storageState + keepalive)`
+          )
         }
       } catch (err) {
         console.error(`[SessionManager] Auth poll error for ${numberId}:`, String(err))
@@ -109,6 +188,7 @@ class SessionManager {
           if (session) {
             session.status = 'disconnected'
             if (session.keepaliveInterval) clearInterval(session.keepaliveInterval)
+            if (session.storageKeepaliveInterval) clearInterval(session.storageKeepaliveInterval)
           }
           return
         }
@@ -124,14 +204,52 @@ class SessionManager {
     }, 4 * 60 * 1000)
   }
 
+  /** Salva storageState a cada 5 min (cookies frescos). */
+  private startStorageKeepalive(numberId: string, page: Page): NodeJS.Timeout {
+    return setInterval(async () => {
+      try {
+        const s = this.sessions.get(numberId)
+        if (!s?.page || s.page.isClosed()) return
+        if (!browserPool.isOpen(numberId)) return
+        await this.saveStorageState(numberId, s.page)
+      } catch (err) {
+        console.warn(`[SessionManager] Keepalive storage save failed for ${numberId}:`, err)
+      }
+    }, 5 * 60 * 1000)
+  }
+
   /**
    * Retorna a página ativa do número para envio.
    * Para restauração após restart do servidor, reabre browser visível com perfil salvo.
    */
   async getPage(numberId: string): Promise<Page | null> {
-    // Sessão já em memória — retorna diretamente
     const existing = this.sessions.get(numberId)
-    if (existing?.page) return existing.page
+    if (existing?.page) {
+      const alive = this.isPlaywrightSessionAlive(existing.page)
+      if (alive && browserPool.isOpen(numberId)) {
+        // Reseta TTL idle — sem isso o BrowserPool fecha o Chromium entre jobs da fila
+        await browserPool.get(numberId)
+        return existing.page
+      }
+      if (!alive) {
+        console.error(
+          `[SessionManager] Browser disconnected for ${numberId} — marking disconnected`
+        )
+        try {
+          await db.query(
+            `UPDATE rcs.numbers SET status = 'disconnected', updated_at = NOW() WHERE id = $1`,
+            [numberId]
+          )
+        } catch (err) {
+          console.warn(`[SessionManager] Could not mark number disconnected:`, err)
+        }
+      } else {
+        console.warn(
+          `[SessionManager] Pool closed for ${numberId} — clearing local session before re-bind`
+        )
+      }
+      await this.clearLocalSession(numberId)
+    }
 
     // Verifica se está autenticado no banco
     const numRow = await db.query(
@@ -139,6 +257,13 @@ class SessionManager {
       [numberId]
     )
     if (numRow.rows[0]?.status !== 'authenticated') return null
+
+    const storagePath = getStorageStatePath(numberId)
+    if (!fs.existsSync(storagePath)) {
+      console.warn(
+        `[SessionManager] No storageState file for ${numberId} — restoring from Chrome profile only. Expected: ${storagePath}`
+      )
+    }
 
     // Google Messages SPA crasha em headless — sempre abre visível para restauração
     console.log(`[SessionManager] Restoring session for ${numberId} (headless=false)`)
@@ -159,7 +284,17 @@ class SessionManager {
     // Verifica se realmente está autenticado (não caiu na tela de auth)
     const url = page.url()
     if (url.includes('/authentication')) {
-      console.warn(`[SessionManager] Session expired for ${numberId}`)
+      console.warn(`[SessionManager] Session expired for ${numberId} — QR code required`)
+      if (fs.existsSync(storagePath)) {
+        try {
+          fs.unlinkSync(storagePath)
+          console.warn(
+            `[SessionManager] Removed invalid storageState (expired session): ${storagePath}`
+          )
+        } catch (e) {
+          console.warn(`[SessionManager] Could not remove storageState file:`, e)
+        }
+      }
       await db.query(
         `UPDATE rcs.numbers SET status = 'disconnected', updated_at = NOW() WHERE id = $1`,
         [numberId]
@@ -168,34 +303,59 @@ class SessionManager {
       return null
     }
 
+    await this.saveStorageState(numberId, page)
+    await this.tryMinimizeBrowserWindow(page)
+
     const session: SessionState = {
       page,
       status: 'authenticated',
       keepaliveInterval: this.startKeepalive(numberId, page),
+      storageKeepaliveInterval: this.startStorageKeepalive(numberId, page),
     }
     this.sessions.set(numberId, session)
-    console.log(`[SessionManager] Session restored for ${numberId}`)
+    console.log(`[SessionManager] Session restored and authenticated for ${numberId}`)
 
     return page
   }
 
   async destroySession(numberId: string): Promise<void> {
-    const session = this.sessions.get(numberId)
-    if (session?.keepaliveInterval) clearInterval(session.keepaliveInterval)
-    this.sessions.delete(numberId)
-    await browserPool.close(numberId)
+    await this.clearLocalSession(numberId)
   }
 
-  /** Restaura sessões de números autenticados no startup do servidor */
+  /** Encerra todas as sessões (timers + browsers) — graceful shutdown */
+  async closeAll(): Promise<void> {
+    const ids = [...this.sessions.keys()]
+    if (ids.length === 0) {
+      console.log('[SessionManager] closeAll — no in-memory sessions')
+      return
+    }
+    console.log(`[SessionManager] Closing ${ids.length} session(s)...`)
+    await Promise.allSettled(ids.map((id) => this.destroySession(id)))
+  }
+
+  /**
+   * Registra quais números têm sessão autenticada para restore lazy.
+   * NÃO abre browsers no startup — sessões são restauradas em getPage()
+   * na primeira vez que o worker de dispatch precisar, evitando ERR_ABORTED
+   * quando o servidor reinicia antes de o browser terminar de carregar.
+   */
   async restoreActiveSessions(): Promise<void> {
+    logSessionsDirDiagnostics()
     const result = await db.query(
-      `SELECT id FROM rcs.numbers WHERE status = 'authenticated'`
+      `SELECT id, phone_label FROM rcs.numbers WHERE status = 'authenticated'`
     )
-    console.log(`[SessionManager] Restoring ${result.rows.length} active sessions...`)
+    if (result.rows.length === 0) {
+      console.log('[SessionManager] No authenticated numbers to restore')
+      return
+    }
     for (const row of result.rows) {
-      this.getPage(row.id).catch((err) => {
-        console.warn(`[SessionManager] Could not restore session for ${row.id}:`, String(err))
-      })
+      const id = String(row.id)
+      const phone = row.phone_label ?? ''
+      const stPath = getStorageStatePath(id)
+      console.log(
+        `[SessionManager] Number ${id} (${phone}) will restore lazily on first dispatch.` +
+        (fs.existsSync(stPath) ? ' storageState found.' : ' No storageState — will use Chrome profile.')
+      )
     }
   }
 }

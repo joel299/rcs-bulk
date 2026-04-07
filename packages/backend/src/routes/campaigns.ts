@@ -192,12 +192,13 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
     if (!row.rows[0]) return
 
     const c = row.rows[0]
-    const lastLog = await db.query(
+    // Envia últimas 10 entradas para o cliente conseguir capturar múltiplos envios rápidos
+    const recentLogs = await db.query(
       `SELECT dl.status, dl.message_type, dl.dispatched_at, ct.name, ct.phone
        FROM rcs.dispatch_log dl
        JOIN rcs.contacts ct ON ct.id = dl.contact_id
        WHERE dl.campaign_id = $1
-       ORDER BY dl.dispatched_at DESC LIMIT 1`,
+       ORDER BY dl.dispatched_at DESC LIMIT 10`,
       [campaign.id]
     )
 
@@ -210,8 +211,8 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
       pendingCount: c.total_contacts - c.sent_count - c.failed_count,
     }
 
-    if (lastLog.rows[0]) {
-      const l = lastLog.rows[0]
+    if (recentLogs.rows[0]) {
+      const l = recentLogs.rows[0]
       progress.lastDispatched = {
         contactName: l.name ?? l.phone,
         phone: l.phone,
@@ -220,6 +221,15 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
         dispatchedAt: l.dispatched_at,
       }
     }
+
+    // Campo extra: últimas N entradas para o frontend popular o log completo
+    ;(progress as any).recentDispatched = recentLogs.rows.map((l: any) => ({
+      contactName: l.name ?? l.phone,
+      phone: l.phone,
+      status: l.status,
+      messageType: l.message_type,
+      dispatchedAt: l.dispatched_at,
+    }))
 
     send(progress)
 
@@ -230,6 +240,41 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
   }, 1500)
 
   req.on('close', () => clearInterval(interval))
+})
+
+// Log de envios paginado (cursor-based via dispatched_at)
+campaignsRouter.get('/:id/log', async (req, res) => {
+  const campaign = await getCampaignOrFail(req.params.id, req.user.orgId, res)
+  if (!campaign) return
+
+  const limit = Math.min(Number(req.query.limit ?? 30), 100)
+  const before = req.query.before as string | undefined // ISO timestamp cursor
+
+  const result = await db.query(
+    `SELECT dl.id, dl.status, dl.message_type, dl.dispatched_at, dl.error,
+            ct.name, ct.phone
+     FROM rcs.dispatch_log dl
+     JOIN rcs.contacts ct ON ct.id = dl.contact_id
+     WHERE dl.campaign_id = $1
+       ${before ? 'AND dl.dispatched_at < $3' : ''}
+     ORDER BY dl.dispatched_at DESC
+     LIMIT $2`,
+    before ? [campaign.id, limit, before] : [campaign.id, limit]
+  )
+
+  res.json({
+    data: result.rows.map((l: any) => ({
+      id: l.id,
+      contactName: l.name ?? l.phone,
+      phone: l.phone,
+      status: l.status,
+      messageType: l.message_type,
+      dispatchedAt: l.dispatched_at,
+      error: l.error,
+    })),
+    hasMore: result.rows.length === limit,
+    nextCursor: result.rows.length > 0 ? result.rows[result.rows.length - 1].dispatched_at : null,
+  })
 })
 
 // ── helpers ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { config } from 'dotenv'
 config()
+import http from 'http'
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -13,7 +14,8 @@ import { assetsRouter } from './routes/assets'
 import { storageService } from './services/StorageService'
 import { sessionManager } from './services/SessionManager'
 import { browserPool } from './services/BrowserPool'
-import './workers/dispatchWorker'
+import { cleanDispatchQueueOnStartup } from './services/DispatchQueue'
+import { dispatchWorker } from './workers/dispatchWorker'
 import './workers/keepaliveWorker'
 
 const app = express()
@@ -73,17 +75,63 @@ app.get('*', (req, res) => {
 
 const PORT = Number(process.env.PORT ?? 3000)
 
+let httpServer: http.Server | null = null
+let shutdownInProgress = false
+
+async function shutdown(signal: string) {
+  if (shutdownInProgress) {
+    console.log(`[Server] Shutdown already in progress (got ${signal})`)
+    return
+  }
+  shutdownInProgress = true
+  console.log(`[Server] Received ${signal}, shutting down gracefully...`)
+
+  try {
+    await dispatchWorker.close()
+    console.log('[Server] Dispatch worker closed')
+  } catch (err) {
+    console.warn('[Server] dispatchWorker.close:', err)
+  }
+
+  try {
+    await sessionManager.closeAll()
+    console.log('[Server] SessionManager closed all sessions')
+  } catch (err) {
+    console.warn('[Server] sessionManager.closeAll:', err)
+  }
+
+  try {
+    await browserPool.closeAll()
+    console.log('[Server] Browser pool closed')
+  } catch (err) {
+    console.warn('[Server] browserPool.closeAll:', err)
+  }
+
+  if (httpServer) {
+    httpServer.close(() => {
+      console.log('[Server] HTTP server closed')
+      process.exit(0)
+    })
+    setTimeout(() => {
+      console.error('[Server] Forced shutdown after timeout')
+      process.exit(1)
+    }, 10_000).unref()
+  } else {
+    process.exit(0)
+  }
+}
+
 async function start() {
-  // Inicializa banco e storage
   const { db } = await import('./db/client')
   await db.query('SELECT 1')
 
   await storageService.ensureBucket()
 
-  // Restaura sessões ativas
+  await cleanDispatchQueueOnStartup()
+
   await sessionManager.restoreActiveSessions()
 
-  app.listen(PORT, () => {
+  httpServer = app.listen(PORT, () => {
     console.log(`[Server] Running on port ${PORT}`)
   })
 }
@@ -93,16 +141,16 @@ start().catch((err) => {
   process.exit(1)
 })
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('[Server] SIGTERM received, shutting down...')
-  await browserPool.closeAll()
-  process.exit(0)
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM')
+})
+process.on('SIGINT', () => {
+  void shutdown('SIGINT')
 })
 
-// Evita que erros não tratados derrubem o processo
 process.on('uncaughtException', (err) => {
   console.error('[Server] Uncaught exception:', err)
+  void shutdown('uncaughtException')
 })
 process.on('unhandledRejection', (reason) => {
   console.error('[Server] Unhandled rejection:', reason)
