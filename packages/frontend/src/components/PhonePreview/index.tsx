@@ -38,7 +38,11 @@ export function PhonePreview({ variation }: PhonePreviewProps) {
                 {variation.imageUrl && (
                   <img src={variation.imageUrl} alt="" className="phone-preview__bubble-img" />
                 )}
-                {message && <span className="phone-preview__bubble-text">{message}</span>}
+                {message && (
+                  <span className="phone-preview__bubble-text" style={{ whiteSpace: 'pre-wrap' }}>
+                    {message}
+                  </span>
+                )}
               </div>
             ) : (
               <div className="phone-preview__empty">Escreva uma mensagem para ver o preview</div>

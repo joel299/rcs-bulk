@@ -54,6 +54,56 @@ async function resetPageForSend(_page: Page): Promise<void> {
   await randomDelay(400, 700)
 }
 
+/** Modal / banner de restauração do Chromium ou similar — tenta fechar. */
+async function dismissRestoreDialog(page: Page): Promise<void> {
+  try {
+    const selectors = [
+      'button:has-text("Fechar")',
+      'button:has-text("Close")',
+      'button:has-text("Não restaurar")',
+      `button:has-text("Don't restore")`,
+      'button:has-text("Não")',
+      '[aria-label="Close"]',
+      '[aria-label="Fechar"]',
+    ]
+    for (const sel of selectors) {
+      const btn = page.locator(sel).first()
+      if ((await btn.count()) > 0) {
+        await btn.click({ timeout: 2_000 }).catch(() => {})
+        console.log(`[sendMessage] Dismissed restore-style dialog (${sel})`)
+        await randomDelay(800, 1200)
+        break
+      }
+    }
+  } catch {
+    /* sem modal */
+  }
+}
+
+/**
+ * Fluxo Google: às vezes aparece "Usar Aqui" — clicar e aguardar recarga antes de seguir.
+ */
+async function clickUsarAquiIfPresent(page: Page): Promise<void> {
+  try {
+    const loc = page
+      .locator('text=Usar Aqui')
+      .or(page.getByRole('button', { name: /Usar Aqui/i }))
+      .or(page.getByRole('link', { name: /Usar Aqui/i }))
+      .first()
+    if ((await loc.count()) === 0) return
+    const visible = await loc.isVisible().catch(() => false)
+    if (!visible) return
+    console.log(`[sendMessage] "Usar Aqui" visible — clicking and waiting for reload`)
+    await Promise.all([
+      page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => {}),
+      loc.click({ timeout: 8_000 }),
+    ])
+    await randomDelay(2_000, 3_500)
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Envia mensagem RCS via Google Messages Web.
  *
@@ -82,7 +132,12 @@ export async function sendMessage(
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     })
-    await randomDelay(4000, 6000)
+    await randomDelay(2000, 3000)
+    await dismissRestoreDialog(page)
+    await clickUsarAquiIfPresent(page)
+    await randomDelay(1000, 1500)
+    await dismissRestoreDialog(page)
+    await randomDelay(2000, 3500)
 
     // 2. Clica em "Iniciar chat" (botão FAB)
     console.log(`[sendMessage] Clicking start chat button`)
@@ -151,12 +206,11 @@ export async function sendMessage(
     console.log(`[sendMessage] Waiting for conversation to settle (RCS/SMS)`)
     await randomDelay(5000, 6000)
 
-    // 6. Anexa imagem ANTES de detectar tipo — upload precisa terminar
+    // 6. Anexa imagem ANTES de detectar tipo — obrigatório quando há path; upload 10–12s dentro de attachImage
     if (localImagePath) {
       console.log(`[sendMessage] Attaching image: ${localImagePath}`)
       await attachImage(page, localImagePath)
-      await randomDelay(10_000, 12_000)
-      console.log(`[sendMessage] Image upload wait complete`)
+      console.log(`[sendMessage] Image attach + upload wait complete`)
     }
 
     const messageType = await detectMessageType(page)
@@ -240,65 +294,92 @@ export async function sendMessage(
 }
 
 /**
- * Anexa imagem no Google Messages.
- * Estratégia 1: setInputFiles direto no input[type="file"] (Playwright pierces shadow DOM).
- * Estratégia 2: fileChooser — clica no botão de anexo (CSS ou JS shadow DOM) e intercepta.
- * Se ambos falharem, loga aviso e CONTINUA sem imagem (dispatch não deve falhar por isso).
+ * Anexa só via input[type=file] (setInputFiles), incluindo shadow DOM do compose.
+ * Sucesso sempre loga `[attachImage] ✅ Attached via file input`.
+ * Espera obrigatória 10–12s após anexar.
  */
 async function attachImage(page: Page, localImagePath: string): Promise<void> {
-  // Estratégia 1: input file direto (funciona mesmo oculto; Playwright traversa shadow DOM)
-  try {
-    const fileInput = page.locator('input[type="file"]').first()
-    const count = await fileInput.count().catch(() => 0)
-    if (count > 0) {
-      await fileInput.setInputFiles(localImagePath, { timeout: 5_000 })
-      console.log(`[attachImage] ✓ Image attached via file input`)
-      await randomDelay(1500, 2500)
+  console.log(`[attachImage] Starting (file input only): ${localImagePath}`)
+
+  const tryLocator = page.locator('mws-message-compose input[type="file"]').first()
+  if ((await tryLocator.count()) > 0) {
+    try {
+      await tryLocator.setInputFiles(localImagePath, { timeout: 15_000 })
+      console.log(`[attachImage] ✅ Attached via file input`)
+      await randomDelay(10_000, 12_000)
       return
+    } catch (e) {
+      console.warn(`[attachImage] mws-message-compose locator failed, trying deep shadow:`, String(e))
     }
-  } catch (e1) {
-    console.warn(`[attachImage] file input strategy failed:`, String(e1))
   }
 
-  // Estratégia 2: fileChooser após clicar no botão de anexo
-  try {
-    const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 8_000 })
+  const fallbackLoc = page.locator(Selectors.fileInput).first()
+  if ((await fallbackLoc.count()) > 0) {
+    try {
+      await fallbackLoc.setInputFiles(localImagePath, { timeout: 15_000 })
+      console.log(`[attachImage] ✅ Attached via file input`)
+      await randomDelay(10_000, 12_000)
+      return
+    } catch (e) {
+      console.warn(`[attachImage] Selectors.fileInput failed, trying evaluate handle:`, String(e))
+    }
+  }
 
-    // Tenta clicar via CSS locator; se não achar, usa JS para traversar shadow DOM
-    const clicked = await page.locator(Selectors.attachButton).first().click({ timeout: 3_000 })
-      .then(() => true)
-      .catch(async () => {
-        return page.evaluate(`
-          (() => {
-            function findAttach(root) {
-              for (const el of Array.from(root.querySelectorAll('button,[role="button"]'))) {
-                const label = (el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || '').toLowerCase()
-                if (label.includes('attach') || label.includes('anexar') || label.includes('foto') || label.includes('image')) {
-                  el.click(); return true
-                }
-              }
-              for (const el of Array.from(root.querySelectorAll('*'))) {
-                if (el.shadowRoot) { if (findAttach(el.shadowRoot)) return true }
-              }
-              return false
+  const handle = await page.evaluateHandle(`
+    () => {
+      function findInCompose(root) {
+        var compose = root.querySelector('mws-message-compose')
+        if (compose) {
+          var inputs = compose.querySelectorAll('input[type="file"]')
+          for (var i = 0; i < inputs.length; i++) return inputs[i]
+          var hosts = compose.querySelectorAll('*')
+          for (var j = 0; j < hosts.length; j++) {
+            var sr = hosts[j].shadowRoot
+            if (sr) {
+              var f = findInCompose(sr)
+              if (f) return f
             }
-            return findAttach(document)
-          })()
-        `).then((v) => !!v)
-      })
-
-    if (clicked) {
-      const fileChooser = await fileChooserPromise
-      await fileChooser.setFiles(localImagePath)
-      console.log(`[attachImage] ✓ Image attached via fileChooser`)
-      await randomDelay(1500, 2500)
-      return
+          }
+        }
+        return null
+      }
+      function findAny(root) {
+        var all = root.querySelectorAll('input[type="file"]')
+        if (all.length) return all[0]
+        var nodes = root.querySelectorAll('*')
+        for (var k = 0; k < nodes.length; k++) {
+          var sh = nodes[k].shadowRoot
+          if (sh) {
+            var g = findAny(sh)
+            if (g) return g
+          }
+        }
+        return null
+      }
+      return findInCompose(document) || findAny(document)
     }
-  } catch (e2) {
-    console.warn(`[attachImage] fileChooser strategy failed:`, String(e2))
+  `)
+
+  const el = handle.asElement()
+  if (!el) {
+    await handle.dispose()
+    throw new Error('[attachImage] All attachment strategies failed: no file input')
   }
 
-  console.warn(`[attachImage] Could not attach image — continuing dispatch without image`)
+  try {
+    await el.evaluate(`
+      (n) => {
+        n.style.display = 'block'
+        n.style.visibility = 'visible'
+        n.style.opacity = '1'
+      }
+    `)
+    await el.setInputFiles(localImagePath)
+    console.log(`[attachImage] ✅ Attached via file input`)
+    await randomDelay(10_000, 12_000)
+  } finally {
+    await el.dispose().catch(() => {})
+  }
 }
 
 /**

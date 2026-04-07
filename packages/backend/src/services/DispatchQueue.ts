@@ -116,8 +116,8 @@ class DispatchQueue {
     for (let i = 0; i < contacts.rows.length; i++) {
       const contact = contacts.rows[i]
 
-      // Rotação round-robin entre números disponíveis
-      const number = numbers[i % numbers.length]
+      // Seleção aleatória entre números disponíveis
+      const number = numbers[Math.floor(Math.random() * numbers.length)]
 
       // Seleciona variação
       let variation: any

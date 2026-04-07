@@ -4,6 +4,7 @@ import { sessionManager } from '../services/SessionManager'
 import { storageService } from '../services/StorageService'
 import { sendMessage } from '../playwright/actions'
 import { redisConnection } from '../services/DispatchQueue'
+import { resolveMandatoryCampaignImage } from '../services/attachmentResolve'
 import type { DispatchJobData } from '@rcs/shared'
 import fs from 'fs'
 
@@ -52,19 +53,26 @@ export const dispatchWorker = new Worker<DispatchJobData>(
       console.log(`[Worker] 🌐 Page obtained for number ${numberId}`)
 
       let localImagePath: string | undefined
+      let tempDownloadPath: string | undefined
       if (imageUrl) {
         try {
-          localImagePath = await storageService.downloadToTemp(imageUrl)
+          try {
+            tempDownloadPath = await storageService.downloadToTemp(imageUrl)
+          } catch (err) {
+            console.warn(`[Worker] Could not download image ${imageUrl}:`, err)
+          }
+          localImagePath = resolveMandatoryCampaignImage(imageUrl, tempDownloadPath)
         } catch (err) {
-          console.warn(`[Worker] Could not download image ${imageUrl}:`, err)
+          if (tempDownloadPath) fs.unlink(tempDownloadPath, () => {})
+          throw err
         }
       }
 
       console.log(`[Worker] 📤 Sending message to ${phone}...`)
       const result = await sendMessage(page, phone, message, localImagePath)
 
-      if (localImagePath) {
-        fs.unlink(localImagePath, () => {})
+      if (tempDownloadPath) {
+        fs.unlink(tempDownloadPath, () => {})
       }
 
       if (!result.success) {

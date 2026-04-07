@@ -29,8 +29,8 @@ export const Selectors = {
   /** Campo de texto da mensagem */
   messageInput: 'mws-message-compose [contenteditable], mws-message-compose textarea, mws-conversation-container [contenteditable]',
 
-  /** Botão de anexo */
-  attachButton: 'mws-attach-button button, mws-message-compose [aria-label*="Attach" i], mws-message-compose [aria-label*="Anexar" i]',
+  /** Botão de anexo — "Selecionar anexos" dentro do picker de botões (4º botão) */
+  attachButton: 'mws-message-compose-picker-buttons button[aria-label*="nexar" i], mws-message-compose-picker-buttons button[aria-label*="Attach" i], mws-message-compose-picker-buttons button[title*="nexar" i]',
 
   /** Input de arquivo para imagem */
   fileInput: 'mws-message-compose input[type="file"], input[type="file"][accept*="image"]',

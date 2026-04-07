@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { GlassCard } from '../ui/GlassCard'
 import { Button } from '../ui/Button'
 import { Textarea } from '../ui/Input'
@@ -85,9 +85,7 @@ export function MessagesModule() {
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 600 }}>Mensagens</h2>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-              Use <code style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 4 }}>
-                {'{{nome}}'}
-              </code> para personalizar
+              Use o botão <strong>{'{ }'}</strong> para inserir variável no cursor
             </p>
           </div>
           {variations.length < 5 && (
@@ -115,6 +113,11 @@ export function MessagesModule() {
             onEdit={() => { setEditingId(v.id); setPreviewVariation(v) }}
             onPreview={() => setPreviewVariation(v)}
             onUpdate={(updates) => updateVariation(v.id, updates)}
+            onBodyChange={(body) => {
+              if (previewVariation?.id === v.id) {
+                setPreviewVariation((prev) => prev ? { ...prev, body } : prev)
+              }
+            }}
             onDelete={() => deleteVariation(v.id)}
             onImageUpload={(file) => uploadImage(v.id, file)}
             uploading={uploading}
@@ -135,6 +138,7 @@ interface VariationCardProps {
   index: number
   isEditing: boolean
   isPreview: boolean
+  onBodyChange: (body: string) => void
   onEdit: () => void
   onPreview: () => void
   onUpdate: (u: Partial<MessageVariation>) => void
@@ -145,10 +149,64 @@ interface VariationCardProps {
 
 function VariationCard({
   variation, index, isEditing, isPreview,
-  onEdit, onPreview, onUpdate, onDelete, onImageUpload, uploading,
+  onEdit, onPreview, onUpdate, onBodyChange, onDelete, onImageUpload, uploading,
 }: VariationCardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [localBody, setLocalBody] = useState(variation.body)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Posição do cursor após inserir variável
+  const pendingCursorRef = useRef<number | null>(null)
+
+  // Sincroniza apenas quando muda de variação (id diferente)
+  const prevIdRef = useRef(variation.id)
+  useEffect(() => {
+    if (prevIdRef.current !== variation.id) {
+      prevIdRef.current = variation.id
+      setLocalBody(variation.body)
+    }
+  }, [variation.id, variation.body])
+
+  // Restaura posição do cursor após re-render causado por inserção de variável
+  useLayoutEffect(() => {
+    if (pendingCursorRef.current !== null && textareaRef.current) {
+      const pos = pendingCursorRef.current
+      textareaRef.current.selectionStart = pos
+      textareaRef.current.selectionEnd = pos
+      pendingCursorRef.current = null
+    }
+  })
+
+  function handleBodyChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value
+    setLocalBody(val)
+    onBodyChange(val)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => onUpdate({ body: val }), 600)
+  }
+
+  function insertVariable() {
+    const ta = textareaRef.current
+    const variable = '{{nome}}'
+    if (!ta) {
+      const newVal = localBody + variable
+      setLocalBody(newVal)
+      onBodyChange(newVal)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => onUpdate({ body: newVal }), 600)
+      return
+    }
+    const start = ta.selectionStart ?? localBody.length
+    const end = ta.selectionEnd ?? localBody.length
+    const newVal = localBody.slice(0, start) + variable + localBody.slice(end)
+    pendingCursorRef.current = start + variable.length
+    setLocalBody(newVal)
+    onBodyChange(newVal)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => onUpdate({ body: newVal }), 600)
+    ta.focus()
+  }
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return
@@ -178,22 +236,53 @@ function VariationCard({
       style={{ outline: isPreview ? '1px solid var(--accent)' : 'none', cursor: 'pointer' }}
       onClick={onEdit}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
           Variação {index + 1}
           {isPreview && <span style={{ marginLeft: 8, color: 'var(--accent)', fontSize: 11 }}>● preview</span>}
         </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: 16 }}
-        >
-          ×
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Botão inserir {{nome}} */}
+          <button
+            onClick={(e) => { e.stopPropagation(); insertVariable() }}
+            title="Inserir {{nome}} na posição do cursor"
+            style={{
+              background: 'rgba(10,132,255,0.12)',
+              border: '1px solid rgba(10,132,255,0.3)',
+              borderRadius: 6,
+              color: 'var(--accent)',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '3px 8px',
+              letterSpacing: 0.3,
+              transition: 'background 0.15s, border-color 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(10,132,255,0.22)'
+              ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(10,132,255,0.12)'
+              ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(10,132,255,0.3)'
+            }}
+          >
+            {'{ } '}nome
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete() }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: 16 }}
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <Textarea
-        value={variation.body}
-        onChange={(e) => onUpdate({ body: e.target.value })}
+        ref={textareaRef}
+        value={localBody}
+        onChange={handleBodyChange}
         onPaste={handlePaste}
         placeholder="Digite sua mensagem..."
         style={{ minHeight: 80 }}

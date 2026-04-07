@@ -192,14 +192,21 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
     if (!row.rows[0]) return
 
     const c = row.rows[0]
-    // Envia últimas 10 entradas para o cliente conseguir capturar múltiplos envios rápidos
+    // Últimas 10 entradas do job atual (filtra por started_at)
+    const campFull = await db.query(
+      `SELECT started_at FROM rcs.campaigns WHERE id = $1`, [campaign.id]
+    )
+    const startedAt = campFull.rows[0]?.started_at ?? null
+
     const recentLogs = await db.query(
-      `SELECT dl.status, dl.message_type, dl.dispatched_at, ct.name, ct.phone
+      `SELECT dl.status, dl.message_type, dl.dispatched_at, ct.name, ct.phone, n.phone_label
        FROM rcs.dispatch_log dl
        JOIN rcs.contacts ct ON ct.id = dl.contact_id
+       LEFT JOIN rcs.numbers n ON n.id = dl.number_id
        WHERE dl.campaign_id = $1
+         ${startedAt ? 'AND dl.dispatched_at >= $2' : ''}
        ORDER BY dl.dispatched_at DESC LIMIT 10`,
-      [campaign.id]
+      startedAt ? [campaign.id, startedAt] : [campaign.id]
     )
 
     const progress: CampaignProgress = {
@@ -229,6 +236,7 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
       status: l.status,
       messageType: l.message_type,
       dispatchedAt: l.dispatched_at,
+      numberLabel: l.phone_label ?? null,
     }))
 
     send(progress)
@@ -242,24 +250,33 @@ campaignsRouter.get('/:id/progress', async (req, res) => {
   req.on('close', () => clearInterval(interval))
 })
 
-// Log de envios paginado (cursor-based via dispatched_at)
+// Log de envios paginado — filtra pelo job atual (started_at) + phone_label do número
 campaignsRouter.get('/:id/log', async (req, res) => {
   const campaign = await getCampaignOrFail(req.params.id, req.user.orgId, res)
   if (!campaign) return
 
   const limit = Math.min(Number(req.query.limit ?? 30), 100)
-  const before = req.query.before as string | undefined // ISO timestamp cursor
+  const before = req.query.before as string | undefined
+
+  // Filtra apenas entradas do job atual (>= started_at), se disponível
+  const startedAt: string | null = campaign.started_at ?? null
+
+  const params: any[] = [campaign.id, limit]
+  const conditions: string[] = []
+  if (startedAt) { conditions.push(`dl.dispatched_at >= $${params.push(startedAt)}`)}
+  if (before)    { conditions.push(`dl.dispatched_at < $${params.push(before)}`) }
+  const where = conditions.length ? 'AND ' + conditions.join(' AND ') : ''
 
   const result = await db.query(
     `SELECT dl.id, dl.status, dl.message_type, dl.dispatched_at, dl.error,
-            ct.name, ct.phone
+            ct.name, ct.phone, n.phone_label
      FROM rcs.dispatch_log dl
      JOIN rcs.contacts ct ON ct.id = dl.contact_id
-     WHERE dl.campaign_id = $1
-       ${before ? 'AND dl.dispatched_at < $3' : ''}
+     LEFT JOIN rcs.numbers n ON n.id = dl.number_id
+     WHERE dl.campaign_id = $1 ${where}
      ORDER BY dl.dispatched_at DESC
      LIMIT $2`,
-    before ? [campaign.id, limit, before] : [campaign.id, limit]
+    params
   )
 
   res.json({
@@ -271,6 +288,7 @@ campaignsRouter.get('/:id/log', async (req, res) => {
       messageType: l.message_type,
       dispatchedAt: l.dispatched_at,
       error: l.error,
+      numberLabel: l.phone_label ?? null,
     })),
     hasMore: result.rows.length === limit,
     nextCursor: result.rows.length > 0 ? result.rows[result.rows.length - 1].dispatched_at : null,

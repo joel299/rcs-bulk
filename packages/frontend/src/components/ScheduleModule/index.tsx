@@ -25,6 +25,7 @@ interface LogEntry {
   status: 'sent' | 'failed'
   messageType: string
   dispatchedAt: string
+  numberLabel?: string | null
 }
 
 export function ScheduleModule() {
@@ -35,6 +36,8 @@ export function ScheduleModule() {
   const [logCursor, setLogCursor] = useState<string | null>(null)
   const [logHasMore, setLogHasMore] = useState(false)
   const [logLoading, setLogLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const sseRef = useRef<EventSource | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const seenDispatched = useRef<Set<string>>(new Set())
@@ -146,32 +149,64 @@ export function ScheduleModule() {
   }
 
   async function startCampaign() {
-    await post(`/api/campaigns/${activeCampaign!.id}/start`, {})
-    const updated = { ...activeCampaign!, status: 'running' as const }
-    setActiveCampaign(updated)
-    startProgressStream(activeCampaign!.id)
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      await post(`/api/campaigns/${activeCampaign!.id}/start`, {})
+      const updated = { ...activeCampaign!, status: 'running' as const }
+      setActiveCampaign(updated)
+      startProgressStream(activeCampaign!.id)
+    } catch (err: any) {
+      setActionError(err.message ?? 'Erro ao iniciar campanha')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   async function pauseCampaign() {
-    await post(`/api/campaigns/${activeCampaign!.id}/pause`, {})
-    setActiveCampaign({ ...activeCampaign!, status: 'paused' })
-    sseRef.current?.close()
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      await post(`/api/campaigns/${activeCampaign!.id}/pause`, {})
+      setActiveCampaign({ ...activeCampaign!, status: 'paused' })
+      sseRef.current?.close()
+    } catch (err: any) {
+      setActionError(err.message ?? 'Erro ao pausar')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   async function cancelCampaign() {
     if (!confirm('Cancelar a campanha? Esta ação não pode ser desfeita.')) return
-    await post(`/api/campaigns/${activeCampaign!.id}/cancel`, {})
-    setActiveCampaign({ ...activeCampaign!, status: 'cancelled' })
-    sseRef.current?.close()
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      await post(`/api/campaigns/${activeCampaign!.id}/cancel`, {})
+      setActiveCampaign({ ...activeCampaign!, status: 'cancelled' })
+      sseRef.current?.close()
+    } catch (err: any) {
+      setActionError(err.message ?? 'Erro ao cancelar')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   async function restartCampaign() {
     if (!confirm('Reiniciar a campanha? Todos os contatos serão enviados novamente.')) return
-    await post(`/api/campaigns/${activeCampaign!.id}/restart`, {})
-    setActiveCampaign({ ...activeCampaign!, status: 'draft', sentCount: 0, failedCount: 0 })
-    setProgress(null)
-    setLog([])
-    seenDispatched.current = new Set()
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      await post(`/api/campaigns/${activeCampaign!.id}/restart`, {})
+      setActiveCampaign({ ...activeCampaign!, status: 'draft', sentCount: 0, failedCount: 0 })
+      setProgress(null)
+      setLog([])
+      seenDispatched.current = new Set()
+    } catch (err: any) {
+      setActionError(err.message ?? 'Erro ao reiniciar')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const isRunning = ['running', 'waiting_window'].includes(activeCampaign.status)
@@ -315,26 +350,31 @@ export function ScheduleModule() {
 
       {/* Controles */}
       <GlassCard padding="16px">
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {canStart && (
-            <Button onClick={startCampaign} icon={<span>▶</span>}>
+            <Button onClick={startCampaign} loading={actionLoading} icon={<span>▶</span>}>
               Iniciar
             </Button>
           )}
           {canRestart && (
-            <Button onClick={restartCampaign} icon={<span>↺</span>}>
+            <Button onClick={restartCampaign} loading={actionLoading} icon={<span>↺</span>}>
               Reiniciar
             </Button>
           )}
           {isRunning && (
-            <Button variant="secondary" onClick={pauseCampaign} icon={<span>⏸</span>}>
+            <Button variant="secondary" onClick={pauseCampaign} loading={actionLoading} icon={<span>⏸</span>}>
               Pausar
             </Button>
           )}
           {!['completed', 'cancelled', 'draft'].includes(activeCampaign.status) && (
-            <Button variant="danger" onClick={cancelCampaign} icon={<span>⏹</span>}>
+            <Button variant="danger" onClick={cancelCampaign} loading={actionLoading} icon={<span>⏹</span>}>
               Cancelar
             </Button>
+          )}
+          {actionError && (
+            <span style={{ fontSize: 13, color: 'var(--accent-red)', marginLeft: 4 }}>
+              ✗ {actionError}
+            </span>
           )}
         </div>
       </GlassCard>
@@ -415,6 +455,15 @@ function LogRow({ entry, isLast }: { entry: LogEntry; isLast: boolean }) {
         {' '}
         <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{entry.phone}</span>
       </span>
+      {entry.numberLabel && (
+        <span style={{
+          fontSize: 10, fontWeight: 500, padding: '2px 6px', borderRadius: 4,
+          background: 'rgba(10,132,255,0.12)', color: 'var(--accent)',
+          flexShrink: 0, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }} title={entry.numberLabel}>
+          {entry.numberLabel}
+        </span>
+      )}
       {entry.messageType === 'sms' && (
         <span style={{
           fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,

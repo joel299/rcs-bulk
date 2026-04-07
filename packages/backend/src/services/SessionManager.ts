@@ -229,6 +229,8 @@ class SessionManager {
       if (alive && browserPool.isOpen(numberId)) {
         // Reseta TTL idle — sem isso o BrowserPool fecha o Chromium entre jobs da fila
         await browserPool.get(numberId)
+        // Garante janela minimizada a cada dispatch (não só na primeira autenticação)
+        await this.tryMinimizeBrowserWindow(existing.page)
         return existing.page
       }
       if (!alive) {
