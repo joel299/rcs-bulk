@@ -9,9 +9,13 @@
     "dev:backend": "npm run dev --workspace=packages/backend",
     "dev:frontend": "npm run dev --workspace=packages/frontend",
     "build": "npm run build --workspaces",
-    "db:migrate": "npm run db:migrate --workspace=packages/backend"
+    "db:migrate": "npm run db:migrate --workspace=packages/backend",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.4.5"
   },
   "engines": {
