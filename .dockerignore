@@ -9,5 +9,5 @@ tmp/
 *.log
 .DS_Store
 coverage/
-packages/frontend
+# packages/frontend
 docker-compose*.yml

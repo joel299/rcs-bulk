@@ -6,8 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/joel299/rcs-bulk-backend
-  FRONTEND_IMAGE: ghcr.io/joel299/rcs-bulk-frontend
+  BACKEND_IMAGE: ghcr.io/alcate-ia/rcs-bulk-backend
+  FRONTEND_IMAGE: ghcr.io/alcate-ia/rcs-bulk-frontend
 
 jobs:
   build-and-push:

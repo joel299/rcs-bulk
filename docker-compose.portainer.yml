@@ -1,7 +1,6 @@
 version: "3.8"
 
 services:
-
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -49,7 +48,7 @@ services:
 
   # ── Backend ──────────────────────────────────────────────────────────────────
   backend:
-    image: ghcr.io/joel299/rcs-bulk-backend:latest
+    image: joel299/bulk-rsc-backend:latest
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -92,7 +91,7 @@ services:
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend:
-    image: ghcr.io/joel299/rcs-bulk-frontend:latest
+    image: joel299/bulk-rsc-frontend:latest
     restart: unless-stopped
     networks:
       - suaredeaqui

@@ -3,38 +3,86 @@
  * Preferência por CSS baseado em componentes web (mw-*, mws-*) para robustez.
  * XPath absoluto quebra quando a interface do Google muda.
  */
+
+/** Ordem de tentativa: chip sugerido após digitar o número (sendMessage STEP 4). */
+export const CONTACT_CHIP_SELECTOR_LIST = [
+  "mw-contact-chip-button",
+  "[data-e2e-contact-chip]",
+  ".contact-chip-button",
+  "button.contact-chip",
+  "mw-chips-input button",
+  "mat-chip button",
+  ".recipient-chip button",
+  "mw-contact-chips-input button",
+  "mw-contact-selector-button button",
+  "mws-recipient-contact button",
+  "[data-e2e-contact-button]",
+] as const;
+
 export const Selectors = {
   // Tela de autenticação QR
-  qrCode: 'mw-qr-code',
-  qrCodeImg: 'mw-qr-code img',
+  qrCode: "mw-qr-code",
+  qrCodeImg: "mw-qr-code img",
 
   // Sessão autenticada
-  conversationList: 'mws-conversations-list',
-  mainNav: 'mw-main-nav',
+  conversationList: "mws-conversations-list",
+  mainNav: "mw-main-nav",
 
   // ── Fluxo de envio ──────────────────────────────────────────────────────────
 
-  /** FAB "Iniciar chat" — CSS por componente (mais robusto que XPath absoluto) */
-  startChatBtn: 'mw-fab-link a, mw-new-conversation-button a, [href*="/conversations/new"]',
+  /** FAB "Iniciar chat" */
+  startChatBtn: [
+    "mw-fab-link a",
+    "[data-e2e-start-chat]",
+    'a[href*="conversations/new"]',
+  ].join(", "),
 
   /** Campo do destinatário (nova conversa) */
-  recipientInput: 'mw-contact-chips-input input, mw-new-conversation-sub-header input[type="text"], input[aria-label*="phone" i], input[aria-label*="number" i], input[placeholder*="phone" i]',
+  recipientInput: [
+    'input[name="recipient"]',
+    'input[aria-label*="destinat"]',
+    'input[aria-label*="To"]',
+    "mw-contact-chips-input input",
+  ].join(", "),
 
-  /** Chip / botão "Enviar para …" */
-  contactSelectorBtn: 'mw-contact-selector-button button, mws-recipient-contact button, [data-e2e-contact-button]',
+  /** Chip / confirmação de destinatário */
+  contactSelectorBtn: CONTACT_CHIP_SELECTOR_LIST.join(", "),
 
-  /** Botão de envio */
-  sendBtn: 'mws-message-send-button button, mw-message-send-button button, [aria-label*="Send" i], [aria-label*="Enviar" i], [data-e2e-send-button]',
+  /** Campo de digitação da mensagem — textarea dentro de mws-autosize-textarea */
+  messageInput: [
+    "mws-autosize-textarea textarea",
+    "mws-message-compose textarea",
+    "mws-message-send-bar textarea",
+    'textarea[aria-label*="mensagem"]',
+    'textarea[aria-label*="message"]',
+    "textarea",
+  ].join(", "),
 
-  /** Campo de texto da mensagem */
-  messageInput: 'mws-message-compose [contenteditable], mws-message-compose textarea, mws-conversation-container [contenteditable]',
+  /** Botão enviar */
+  sendBtn: [
+    "mws-message-send-button button",
+    "mw-message-send-button button",
+    'button[aria-label*="Enviar"]',
+    'button[aria-label*="Send"]',
+    'mw-message-send-bar button[type="submit"]',
+    ".send-button button",
+  ].join(", "),
 
-  /** Botão de anexo — "Selecionar anexos" dentro do picker de botões (4º botão) */
-  attachButton: 'mws-message-compose-picker-buttons button[aria-label*="nexar" i], mws-message-compose-picker-buttons button[aria-label*="Attach" i], mws-message-compose-picker-buttons button[title*="nexar" i]',
+  /** Input file para anexo (usar depois) */
+  fileInput: 'input[type="file"]',
 
-  /** Input de arquivo para imagem */
-  fileInput: 'mws-message-compose input[type="file"], input[type="file"][accept*="image"]',
+  /** Botão de anexo (usar depois) */
+  attachButton: [
+    '[data-e2e-picker-button="ATTACHMENT"]',
+    'button[aria-label*="Attach"]',
+    'button[aria-label*="Anexar"]',
+    "[data-e2e-attach-button]",
+  ].join(", "),
 
   /** Indicadores de tipo de mensagem SMS */
-  smsBadge: '.type-indicator--sms, [aria-label*="SMS"], mws-message-type-indicator',
-} as const
+  smsBadge: [
+    '[aria-label*="SMS"]',
+    ".sms-chip",
+    'mw-message-type-indicator[type="sms"]',
+  ].join(", "),
+} as const;

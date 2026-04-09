@@ -14,7 +14,7 @@ COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 
 # Instala dependências
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Build shared primeiro
 RUN pnpm --filter @rcs/shared build
